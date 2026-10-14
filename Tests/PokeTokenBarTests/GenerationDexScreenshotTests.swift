@@ -25,13 +25,14 @@ final class GenerationDexScreenshotTests: XCTestCase {
         guard let directory = ProcessInfo.processInfo.environment["PTB_SCREENSHOT_DIR"] else {
             throw XCTSkip("PTB_SCREENSHOT_DIR 미지정 — 에셋 생성은 릴리스/PR 때만 실행한다")
         }
-        for (language, scheme, suffix) in [
-            (AppLanguage.en, ColorScheme.dark, ""),
-            (.en, .light, "-light"),
-            (.ko, .dark, "-ko"),
-            (.ja, .dark, "-ja"),
+        for (language, scheme, generation, suffix) in [
+            (AppLanguage.en, ColorScheme.dark, false, "-before"),
+            (.en, .dark, true, ""),
+            (.en, .light, true, "-light"),
+            (.ko, .dark, true, "-ko"),
+            (.ja, .dark, true, "-ja"),
         ] {
-            let data = try render(language: language, scheme: scheme)
+            let data = try render(language: language, scheme: scheme, showGeneration: generation)
             let url = URL(fileURLWithPath: directory)
                 .appendingPathComponent("screenshot-generation-dex\(suffix).png")
             try data.write(to: url)
@@ -40,7 +41,7 @@ final class GenerationDexScreenshotTests: XCTestCase {
     }
 
     @MainActor
-    private func render(language: AppLanguage, scheme: ColorScheme) throws -> Data {
+    private func render(language: AppLanguage, scheme: ColorScheme, showGeneration: Bool) throws -> Data {
         let l = L(language)
         let completions = sampleCompletions()
         let selected = PokedexRegion.sinnoh
@@ -51,26 +52,41 @@ final class GenerationDexScreenshotTests: XCTestCase {
             ? Color(red: 41 / 255, green: 41 / 255, blue: 42 / 255)
             : Color(red: 246 / 255, green: 246 / 255, blue: 247 / 255)
 
+        let rarities: [(Rarity, Int)] = [(.common, 210), (.uncommon, 140), (.rare, 78), (.legendary, 29)]
+
         let content = VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text(l.dexTitle).font(.callout.weight(.semibold))
                 Text(l.dexSpeciesTotal(457)).font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 4)
-                HStack(spacing: 3) {
-                    ForEach(medals, id: \.0) { emoji, help in
-                        DexBadgeMedal(emoji: emoji, help: help)
+                if showGeneration {
+                    HStack(spacing: 3) {
+                        ForEach(medals, id: \.0) { emoji, help in
+                            DexBadgeMedal(emoji: emoji, help: help)
+                        }
                     }
                 }
             }
-            // Region progress chips — the headline of this feature.
-            HStack(spacing: 5) {
-                ForEach(completions) { c in
-                    RegionTally(label: l.regionName(c.region), completion: c, isSelected: c.region == selected)
+            // Region progress chips — the headline of this feature (new row).
+            if showGeneration {
+                HStack(spacing: 5) {
+                    ForEach(completions) { c in
+                        RegionTally(label: l.regionName(c.region), completion: c, isSelected: c.region == selected)
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            // Existing rarity filter chips, kept in both states for a fair before/after.
+            HStack(spacing: 4) {
+                ForEach(rarities, id: \.0) { r, count in
+                    RarityTally(label: l.rarityLabel(r), count: count, color: rarityColor(r))
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
-            Text(l.dexRegionProgressLabel(selected, owned: 62, total: 107))
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            if showGeneration {
+                Text(l.dexRegionProgressLabel(selected, owned: 62, total: 107))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, PopoverMetrics.padding)
         .padding(.vertical, 16)
